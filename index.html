@@ -120,8 +120,8 @@
   td.day-cell.weekend{background:#faf7ef}
   td.day-cell.free{background:var(--free)}
   td.day-cell.free:hover{background:var(--accent-soft)}
-  td.day-cell.holiday{background:repeating-linear-gradient(45deg,#edeae3,#edeae3 5px,#e4e0d6 5px,#e4e0d6 10px)!important}
-  td.day-cell.holiday:hover{background:repeating-linear-gradient(45deg,#e6e2d9,#e6e2d9 5px,#dcd7cb 5px,#dcd7cb 10px)!important}
+  td.day-cell.holiday{background:#d9d5cb!important}
+  td.day-cell.holiday:hover{background:#d0ccc0!important}
   td.day-cell.today-col{box-shadow:inset 2px 0 0 var(--accent),inset -2px 0 0 var(--accent)}
   .chips{display:flex;flex-wrap:wrap;gap:3px;justify-content:center;align-items:center}
   .chip{font-size:10.5px;font-weight:600;color:#fff;padding:2px 7px;border-radius:5px;line-height:1.3;white-space:nowrap;letter-spacing:.01em;max-width:96px;overflow:hidden;text-overflow:ellipsis}
@@ -431,14 +431,16 @@ function render(){
         if(isoOf(dt)===todayISO) cls.push("today-col");
         const isFree = a.length===0;
         if(isFree && state.highlightFree && dow<5) cls.push("free");
-        if(a.some(isHoliday)) cls.push("holiday");
+        const cellHoliday = a.some(isHoliday);
+        if(cellHoliday) cls.push("holiday");
         let inner;
-        if(a.length){
+        if(cellHoliday){
+          inner="";
+        } else if(a.length){
           inner=`<div class="chips">`+a.map(pid=>{
             const pr=projById(pid); if(!pr) return "";
             const dim = focusProject && focusProject!==pid ? " dim":"";
-            const hol = isHoliday(pid) ? " holiday-chip":"";
-            return `<span class="chip${dim}${hol}" style="background:${pr.color}" title="${escapeHtml(pr.name)}">${escapeHtml(pr.name)}</span>`;
+            return `<span class="chip${dim}" style="background:${pr.color}" title="${escapeHtml(pr.name)}">${escapeHtml(pr.name)}</span>`;
           }).join("")+`</div>`;
         } else {
           inner=`<span class="cell-plus">+</span>`;
@@ -537,10 +539,13 @@ function updateCell(td){
   const pid=td.dataset.pid, date=td.dataset.date;
   const a=state.assignments[keyOf2(pid,date)]||[];
   const dt=new Date(date+"T00:00:00"); const dow=(dt.getDay()+6)%7;
+  const cellHoliday=a.some(isHoliday);
   td.classList.toggle("free", a.length===0 && state.highlightFree && dow<5);
-  td.classList.toggle("holiday", a.some(isHoliday));
-  if(a.length){
-    td.innerHTML=`<div class="chips">`+a.map(p=>{const pr=projById(p);if(!pr)return"";const dim=focusProject&&focusProject!==p?" dim":"";const hol=isHoliday(p)?" holiday-chip":"";return `<span class="chip${dim}${hol}" style="background:${pr.color}" title="${escapeHtml(pr.name)}">${escapeHtml(pr.name)}</span>`;}).join("")+`</div>`;
+  td.classList.toggle("holiday", cellHoliday);
+  if(cellHoliday){
+    td.innerHTML="";
+  } else if(a.length){
+    td.innerHTML=`<div class="chips">`+a.map(p=>{const pr=projById(p);if(!pr)return"";const dim=focusProject&&focusProject!==p?" dim":"";return `<span class="chip${dim}" style="background:${pr.color}" title="${escapeHtml(pr.name)}">${escapeHtml(pr.name)}</span>`;}).join("")+`</div>`;
   } else td.innerHTML=`<span class="cell-plus">+</span>`;
 }
 function refreshLegendCounts(){ renderLegend(visibleDays()); }
@@ -684,46 +689,4 @@ document.addEventListener("keydown",e=>{ if(e.key==="Escape"){ closePop(); close
 window.addEventListener("resize",closePop);
 window.addEventListener("scroll",closePop,true);
 
-document.getElementById("prevBtn").onclick=()=>{ const d=new Date(state.startISO+"T00:00:00"); d.setDate(d.getDate()-7); state.startISO=isoOf(mondayOf(d)); save(); render(); };
-document.getElementById("nextBtn").onclick=()=>{ const d=new Date(state.startISO+"T00:00:00"); d.setDate(d.getDate()+7); state.startISO=isoOf(mondayOf(d)); save(); render(); };
-document.getElementById("todayBtn").onclick=()=>{ state.startISO=isoOf(mondayOf(new Date())); save(); render(); };
-document.querySelectorAll("#weekSeg button").forEach(b=>b.onclick=()=>{ state.weeks=+b.dataset.w; save(); render(); });
-document.getElementById("weekendTog").onchange=e=>{ state.weekends=e.target.checked; save(); render(); };
-document.getElementById("freeTog").onchange=e=>{ state.highlightFree=e.target.checked; save(); render(); };
-
-document.getElementById("projBtn").onclick=openProjects;
-document.getElementById("peopleBtn").onclick=openPeople;
-document.getElementById("shareBtn").onclick=openShare;
-document.getElementById("printBtn").onclick=()=>window.print();
-document.getElementById("exportBtn").onclick=doExport;
-document.getElementById("importBtn").onclick=()=>document.getElementById("fileInput").click();
-document.getElementById("fileInput").onchange=e=>{ if(e.target.files[0]) doImport(e.target.files[0]); };
-
-// editable title
-const titleEl=document.getElementById("boardTitle");
-if(!readOnly){
-  titleEl.setAttribute("contenteditable","true");
-  titleEl.addEventListener("blur",()=>{ state.title=titleEl.textContent.trim()||"Resource Board"; titleEl.textContent=state.title; save(); });
-  titleEl.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); titleEl.blur(); } });
-}
-
-// read-only mode UI
-if(readOnly){
-  document.getElementById("banner").classList.add("show");
-  document.getElementById("controls").querySelectorAll(".toggle, .seg, #prevBtn,#nextBtn,#todayBtn").forEach(()=>{});
-  // hide editing buttons but keep navigation + view toggles
-  ["peopleBtn","projBtn","shareBtn","exportBtn","importBtn"].forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display="none"; });
-  document.getElementById("subline").textContent="Read-only snapshot";
-  document.getElementById("makeCopyBtn").onclick=()=>{
-    readOnly=false;
-    history.replaceState(null,"",location.pathname);
-    lsSet(JSON.stringify(state));
-    location.reload();
-  };
-}
-
-render();
-})();
-</script>
-</body>
-</html>
+document.getElementBy
